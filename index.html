@@ -1,0 +1,146 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>直播货盘组合系统</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="bg-decor"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-group">
+        <button id="importCsvBtn" class="btn btn-primary">导入CSV</button>
+        <input id="csvFileInput" type="file" accept=".csv,text/csv" hidden />
+        <button id="clearDbBtn" class="btn btn-outline-danger">清空库</button>
+        <div class="meta-pill">SKU数：<strong id="skuCount">0</strong></div>
+        <div class="meta-pill">更新时间：<strong id="skuUpdatedAt">未导入</strong></div>
+      </div>
+
+      <div class="topbar-group right">
+        <button id="exportOpsBtn" class="btn">导出运营版HTML</button>
+        <button id="previewOpsBtn" class="btn btn-secondary">运营版预览</button>
+        <button id="exportHostBtn" class="btn">导出主播版HTML</button>
+        <button id="previewHostBtn" class="btn btn-secondary">主播版预览</button>
+        <button id="exportNormalBtn" class="btn">导出普通版HTML</button>
+        <button id="previewNormalBtn" class="btn btn-secondary">普通版预览</button>
+      </div>
+    </header>
+
+    <div id="statusBar" class="status-bar" aria-live="polite"></div>
+
+    <main class="workspace-grid">
+      <section class="panel panel-products">
+        <div class="panel-header">
+          <h2>产品库</h2>
+        </div>
+        <div class="field">
+          <label for="productSearchInput">搜索产品（名称 / ID）</label>
+          <input id="productSearchInput" type="text" placeholder="输入关键词过滤" />
+        </div>
+        <div id="productList" class="product-list"></div>
+      </section>
+
+      <section class="panel panel-editor">
+        <div class="panel-header">
+          <h2>套装编辑</h2>
+        </div>
+
+        <div class="field">
+          <label for="bundleTitleInput">套装标题</label>
+          <input id="bundleTitleInput" type="text" placeholder="例如：爆款居家清洁组合" />
+        </div>
+
+        <div class="table-wrap">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>产品</th>
+                <th>单价</th>
+                <th>库存</th>
+                <th>数量</th>
+                <th>小计</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="bundleItemsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="field">
+          <label for="bundleNotesInput">备注 / 卖点</label>
+          <textarea id="bundleNotesInput" rows="4" placeholder="写给主播的话术重点、促销机制、赠品说明"></textarea>
+        </div>
+      </section>
+
+      <section class="panel panel-calc">
+        <div class="panel-header">
+          <h2>计算面板</h2>
+          <span class="hint">快速模式：售价 + 佣金率（平台服务费固定 7%）</span>
+        </div>
+
+        <div class="calc-inputs">
+          <div id="fieldPrice" class="field">
+            <label for="calcPriceInput">售价 P（支持￥、逗号）</label>
+            <input id="calcPriceInput" type="text" placeholder="例如 199 或 ￥199" />
+          </div>
+          <div id="fieldComm" class="field">
+            <label for="calcCommInput">佣金率 r_comm（支持 0.2 或 20，20=20%）</label>
+            <input id="calcCommInput" type="text" placeholder="例如 0.25 或 25" />
+          </div>
+        </div>
+
+        <div class="calc-output-grid">
+          <div class="kv"><span>C_base</span><strong id="outCBase">--</strong></div>
+          <div class="kv"><span>售价 P</span><strong id="outPrice">--</strong></div>
+          <div class="kv"><span>服务费 Fee</span><strong id="outFee">--</strong></div>
+          <div class="kv"><span>佣金额 Commission</span><strong id="outCommissionAmount">--</strong></div>
+          <div class="kv"><span>佣金率 r_comm</span><strong id="outCommissionRate">--</strong></div>
+          <div class="kv"><span>C_actual</span><strong id="outCActual">--</strong></div>
+          <div class="kv"><span>Profit</span><strong id="outProfit">--</strong></div>
+          <div class="kv"><span>ProfitRate</span><strong id="outProfitRate">--</strong></div>
+        </div>
+
+        <div class="calc-output-grid secondary">
+          <div class="kv"><span>最大可卖套数</span><strong id="outMaxSets">0</strong></div>
+          <div class="kv"><span>可撑GMV</span><strong id="outMaxGmv">--</strong></div>
+          <div class="kv"><span>可撑佣金支出</span><strong id="outMaxCommission">--</strong></div>
+          <div class="kv"><span>可撑利润</span><strong id="outMaxProfit">--</strong></div>
+        </div>
+
+        <div id="calcWarning" class="warning-box"></div>
+      </section>
+
+      <section class="panel panel-bundles">
+        <div class="panel-header split">
+          <h2>货盘套装列表</h2>
+          <div class="inline-actions">
+            <button id="addBundleBtn" class="btn btn-sm">新增套装</button>
+            <button id="copyBundleBtn" class="btn btn-sm">复制套装</button>
+            <button id="deleteBundleBtn" class="btn btn-sm btn-outline-danger">删除套装</button>
+          </div>
+        </div>
+
+        <div id="bundleCards" class="bundle-cards"></div>
+
+        <div class="summary-grid">
+          <div class="summary-item"><span>套装数</span><strong id="sumBundleCount">0</strong></div>
+          <div class="summary-item"><span>总可卖套数</span><strong id="sumMaxSets">0</strong></div>
+          <div class="summary-item"><span>总可撑GMV</span><strong id="sumGmv">--</strong></div>
+          <div class="summary-item"><span>总可撑佣金支出</span><strong id="sumCommission">--</strong></div>
+          <div class="summary-item"><span>总可撑利润</span><strong id="sumProfit">--</strong></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="assets/csv.js"></script>
+  <script src="assets/storage.js"></script>
+  <script src="assets/calc.js"></script>
+  <script src="assets/templates.js"></script>
+  <script src="assets/export.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
