@@ -73,6 +73,7 @@
 
     els.sumBundleCount = document.getElementById('sumBundleCount');
     els.sumMaxSets = document.getElementById('sumMaxSets');
+    els.sumRemainingSets = document.getElementById('sumRemainingSets');
     els.sumGmv = document.getElementById('sumGmv');
     els.sumCommission = document.getElementById('sumCommission');
     els.sumProfit = document.getElementById('sumProfit');
@@ -578,7 +579,10 @@
   function updateCalcOutputs(bundle) {
     var computed = getBundleComputed(bundle);
     var metrics = computed.metrics;
-    var stock = computed.stock;
+    var remainingContext = buildRemainingStockContext();
+    var remainingStockMap = remainingContext.remainingStockMap;
+    var dynamicStock = getDynamicStockForBundle(bundle, remainingStockMap, metrics);
+    var hasDeficit = hasBundleStockDeficit(bundle, remainingStockMap);
 
     els.outCBase.textContent = formatMoney(computed.C_base);
 
@@ -590,9 +594,9 @@
       els.outCActual.textContent = formatMoney(metrics.C_actual);
       els.outProfit.textContent = formatMoney(metrics.Profit);
       els.outProfitRate.textContent = formatPct(metrics.ProfitRate);
-      els.outMaxGmv.textContent = formatMoney(stock.gmv);
-      els.outMaxCommission.textContent = formatMoney(stock.commissionBudget);
-      els.outMaxProfit.textContent = formatMoney(stock.profitCapacity);
+      els.outMaxGmv.textContent = formatMoney(dynamicStock.gmv);
+      els.outMaxCommission.textContent = formatMoney(dynamicStock.commissionBudget);
+      els.outMaxProfit.textContent = formatMoney(dynamicStock.profitCapacity);
     } else {
       els.outPrice.textContent = '--';
       els.outFee.textContent = '--';
@@ -606,13 +610,16 @@
       els.outMaxProfit.textContent = '--';
     }
 
-    els.outMaxSets.textContent = formatInt(stock.maxSets);
+    els.outMaxSets.textContent = formatInt(dynamicStock.maxSets);
 
     var warnings = [];
     if (!metrics.valid && metrics.message) {
       warnings.push(metrics.message);
     } else if (metrics.message) {
       warnings.push(metrics.message);
+    }
+    if (hasDeficit) {
+      warnings.push('当前套装涉及的 SKU 已出现超卖，请先调整已售套数或库存。');
     }
 
     if (warnings.length > 0) {
@@ -628,7 +635,8 @@
 
   function renderBundleCardsAndSummary() {
     var bundles = state.workspace.bundles;
-    var totalMaxSets = 0;
+    var totalTheoryMaxSets = 0;
+    var totalRemainingSets = 0;
     var totalGmv = 0;
     var totalCommission = 0;
     var totalProfit = 0;
@@ -642,11 +650,13 @@
       var soldSets = normalizeNonNegativeInt(bundle.soldSets, 0);
       var remainingSets = getRemainingSetsForBundle(bundle, remainingStockMap);
       var deficit = hasBundleStockDeficit(bundle, remainingStockMap);
+      var dynamicStock = getDynamicStockForBundle(bundle, remainingStockMap, metrics);
 
-      totalMaxSets += toFinite(stock.maxSets, 0);
-      totalGmv += toFinite(stock.gmv, 0);
-      totalCommission += toFinite(stock.commissionBudget, 0);
-      totalProfit += toFinite(stock.profitCapacity, 0);
+      totalTheoryMaxSets += toFinite(stock.maxSets, 0);
+      totalRemainingSets += toFinite(remainingSets, 0);
+      totalGmv += toFinite(dynamicStock.gmv, 0);
+      totalCommission += toFinite(dynamicStock.commissionBudget, 0);
+      totalProfit += toFinite(dynamicStock.profitCapacity, 0);
 
       var title = bundle.title && bundle.title.trim() ? bundle.title : ('套装' + (index + 1));
       var active = bundle.id === state.workspace.currentBundleId ? 'active' : '';
@@ -664,11 +674,11 @@
         '<div class="bundle-title">' + escapeHtml(title) + '</div>',
         '<div class="bundle-info">SKU 数: ' + formatInt(bundle.items.length) + ' ｜ 成本合计: ' + formatMoney(computed.C_base) + '</div>',
         '<div class="bundle-info">售价: ' + price + ' ｜ 利润率: ' + profitRate + '</div>',
-        '<div class="bundle-info">最大可卖: ' + formatInt(stock.maxSets) + ' 套 ｜ 可撑GMV: ' + formatMoney(stock.gmv) + '</div>',
+        '<div class="bundle-info">理论可卖: ' + formatInt(stock.maxSets) + ' 套 ｜ 动态剩余可卖: ' + formatInt(remainingSets) + ' 套</div>',
         '<label class="bundle-inline-edit">已售套数',
         '<input class="sold-sets-input" data-bundle-id="' + escapeHtml(bundle.id) + '" type="number" min="0" step="1" value="' + soldSets + '" />',
         '</label>',
-        '<div class="bundle-info">预计剩余可卖: ' + formatInt(remainingSets) + ' 套（按已售分配后）</div>',
+        '<div class="bundle-info">动态可撑GMV: ' + formatMoney(dynamicStock.gmv) + ' ｜ 动态可撑利润: ' + formatMoney(dynamicStock.profitCapacity) + '</div>',
         info,
         deficitInfo,
         '</article>'
@@ -676,7 +686,8 @@
     }).join('');
 
     els.sumBundleCount.textContent = formatInt(bundles.length);
-    els.sumMaxSets.textContent = formatInt(totalMaxSets);
+    els.sumMaxSets.textContent = formatInt(totalTheoryMaxSets);
+    els.sumRemainingSets.textContent = formatInt(totalRemainingSets);
     els.sumGmv.textContent = formatMoney(totalGmv);
     els.sumCommission.textContent = formatMoney(totalCommission);
     els.sumProfit.textContent = formatMoney(totalProfit);
@@ -877,16 +888,8 @@
       });
     });
 
-    var deficitSkuCount = 0;
-    remainingStockMap.forEach(function (remain) {
-      if (toFinite(remain, 0) < 0) {
-        deficitSkuCount += 1;
-      }
-    });
-
     return {
-      remainingStockMap: remainingStockMap,
-      deficitSkuCount: deficitSkuCount
+      remainingStockMap: remainingStockMap
     };
   }
 
@@ -915,6 +918,26 @@
       return 0;
     }
     return maxSets;
+  }
+
+  function getDynamicStockForBundle(bundle, remainingStockMap, metrics) {
+    var remainingSets = getRemainingSetsForBundle(bundle, remainingStockMap);
+    var gmv = 0;
+    var commissionBudget = 0;
+    var profitCapacity = 0;
+
+    if (metrics && metrics.valid) {
+      gmv = remainingSets * toFinite(metrics.P, 0);
+      commissionBudget = remainingSets * toFinite(metrics.Commission, 0);
+      profitCapacity = remainingSets * toFinite(metrics.Profit, 0);
+    }
+
+    return {
+      maxSets: remainingSets,
+      gmv: gmv,
+      commissionBudget: commissionBudget,
+      profitCapacity: profitCapacity
+    };
   }
 
   function hasBundleStockDeficit(bundle, remainingStockMap) {

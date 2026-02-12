@@ -521,7 +521,7 @@ body {
   border-top: 1px dashed #c9d8e8;
   padding-top: 10px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
   gap: 8px;
 }
 
