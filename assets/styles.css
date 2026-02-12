@@ -316,6 +316,33 @@ body {
   text-overflow: ellipsis;
 }
 
+.product-stock-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.stock-quick-input,
+.stock-inline-input,
+.sold-sets-input {
+  width: 78px;
+  border: 1px solid #bfd1e6;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--text);
+  background: #fff;
+}
+
+.stock-quick-input:focus,
+.stock-inline-input:focus,
+.sold-sets-input:focus {
+  outline: none;
+  border-color: #7ea7da;
+  box-shadow: 0 0 0 2px rgba(63, 131, 221, 0.15);
+}
+
 .empty-block {
   border: 1px dashed #c4d5e9;
   color: #5f748a;
@@ -461,10 +488,23 @@ body {
   background: #fff7f7;
 }
 
+.bundle-card.stock-deficit {
+  border-color: #df9a9a;
+}
+
 .bundle-title {
   font-size: 15px;
   font-weight: 700;
   margin-bottom: 6px;
+}
+
+.bundle-inline-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #3f5874;
+  font-size: 12px;
 }
 
 .bundle-info {

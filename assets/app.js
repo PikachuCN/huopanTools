@@ -107,6 +107,13 @@
       addProductToCurrentBundle(button.getAttribute('data-product-id'));
     });
 
+    els.productList.addEventListener('change', function (event) {
+      if (!event.target.classList.contains('stock-quick-input')) {
+        return;
+      }
+      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value);
+    });
+
     els.bundleItemsBody.addEventListener('input', function (event) {
       if (!event.target.classList.contains('qty-input')) {
         return;
@@ -123,6 +130,13 @@
       persistWorkspace();
       renderBundleEditor();
       renderBundleCardsAndSummary();
+    });
+
+    els.bundleItemsBody.addEventListener('change', function (event) {
+      if (!event.target.classList.contains('stock-inline-input')) {
+        return;
+      }
+      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value);
     });
 
     els.bundleItemsBody.addEventListener('click', function (event) {
@@ -236,6 +250,9 @@
     });
 
     els.bundleCards.addEventListener('click', function (event) {
+      if (event.target.closest('input, textarea, select, button, label')) {
+        return;
+      }
       var card = event.target.closest('.bundle-card');
       if (!card) {
         return;
@@ -247,6 +264,20 @@
       state.workspace.currentBundleId = bundleId;
       persistWorkspace();
       renderBundleEditor();
+      renderBundleCardsAndSummary();
+    });
+
+    els.bundleCards.addEventListener('change', function (event) {
+      if (!event.target.classList.contains('sold-sets-input')) {
+        return;
+      }
+      var bundleId = event.target.getAttribute('data-bundle-id');
+      var bundle = getBundleById(bundleId);
+      if (!bundle) {
+        return;
+      }
+      bundle.soldSets = normalizeNonNegativeInt(event.target.value, 0);
+      persistWorkspace();
       renderBundleCardsAndSummary();
     });
 
@@ -465,6 +496,7 @@
       var img = product.image_url
         ? '<img class="thumb" src="' + escapeHtml(product.image_url) + '" alt="" />'
         : '<div class="thumb thumb-empty">无图</div>';
+      var stock = Math.max(0, Math.floor(toFinite(product.stock, 0)));
 
       return [
         '<article class="product-item">',
@@ -472,7 +504,10 @@
         '<div class="product-main">',
         '<div class="product-name">' + escapeHtml(product.product_name || product.product_id) + '</div>',
         '<div class="product-meta">ID: ' + escapeHtml(product.product_id) + '</div>',
-        '<div class="product-meta">成本: ' + formatMoney(toFinite(product.cost, 0)) + ' ｜ 库存: ' + formatInt(product.stock) + '</div>',
+        '<div class="product-meta">成本: ' + formatMoney(toFinite(product.cost, 0)) + '</div>',
+        '<label class="product-meta product-stock-edit">库存:',
+        '<input class="stock-quick-input" data-product-id="' + escapeHtml(product.product_id) + '" type="number" min="0" step="1" value="' + stock + '" />',
+        '</label>',
         '</div>',
         '<button class="btn btn-sm add-product-btn" data-product-id="' + escapeHtml(product.product_id) + '">加入</button>',
         '</article>'
@@ -515,7 +550,7 @@
           '<td>' + imageNode + '</td>',
           '<td class="product-cell">' + escapeHtml(name) + '</td>',
           '<td>' + formatMoney(cost) + '</td>',
-          '<td>' + formatInt(stock) + '</td>',
+          '<td><input class="stock-inline-input" data-product-id="' + escapeHtml(item.product_id) + '" type="number" min="0" step="1" value="' + formatInt(stock) + '" ' + (product ? '' : 'disabled') + ' /></td>',
           '<td><input class="qty-input" data-index="' + index + '" type="number" min="1" step="1" value="' + qty + '" /></td>',
           '<td>' + formatMoney(cost * qty) + '</td>',
           '<td><button class="btn btn-sm btn-outline-danger remove-item-btn" data-index="' + index + '">删除</button></td>',
@@ -597,11 +632,16 @@
     var totalGmv = 0;
     var totalCommission = 0;
     var totalProfit = 0;
+    var remainingContext = buildRemainingStockContext();
+    var remainingStockMap = remainingContext.remainingStockMap;
 
     els.bundleCards.innerHTML = bundles.map(function (bundle, index) {
       var computed = getBundleComputed(bundle);
       var metrics = computed.metrics;
       var stock = computed.stock;
+      var soldSets = normalizeNonNegativeInt(bundle.soldSets, 0);
+      var remainingSets = getRemainingSetsForBundle(bundle, remainingStockMap);
+      var deficit = hasBundleStockDeficit(bundle, remainingStockMap);
 
       totalMaxSets += toFinite(stock.maxSets, 0);
       totalGmv += toFinite(stock.gmv, 0);
@@ -611,17 +651,26 @@
       var title = bundle.title && bundle.title.trim() ? bundle.title : ('套装' + (index + 1));
       var active = bundle.id === state.workspace.currentBundleId ? 'active' : '';
       var loss = metrics.loss ? 'loss' : '';
+      var stockDeficit = deficit ? 'stock-deficit' : '';
       var price = metrics.valid ? formatMoney(metrics.P) : '--';
       var profitRate = metrics.valid ? formatPct(metrics.ProfitRate) : '--';
       var info = metrics.valid ? '' : '<div class="bundle-info muted">参数未完整</div>';
+      var deficitInfo = deficit
+        ? '<div class="bundle-info muted">库存分配已超卖，请调整已售套数或库存。</div>'
+        : '';
 
       return [
-        '<article class="bundle-card ' + active + ' ' + loss + '" data-bundle-id="' + escapeHtml(bundle.id) + '">',
+        '<article class="bundle-card ' + active + ' ' + loss + ' ' + stockDeficit + '" data-bundle-id="' + escapeHtml(bundle.id) + '">',
         '<div class="bundle-title">' + escapeHtml(title) + '</div>',
         '<div class="bundle-info">SKU 数: ' + formatInt(bundle.items.length) + ' ｜ 成本合计: ' + formatMoney(computed.C_base) + '</div>',
         '<div class="bundle-info">售价: ' + price + ' ｜ 利润率: ' + profitRate + '</div>',
         '<div class="bundle-info">最大可卖: ' + formatInt(stock.maxSets) + ' 套 ｜ 可撑GMV: ' + formatMoney(stock.gmv) + '</div>',
+        '<label class="bundle-inline-edit">已售套数',
+        '<input class="sold-sets-input" data-bundle-id="' + escapeHtml(bundle.id) + '" type="number" min="0" step="1" value="' + soldSets + '" />',
+        '</label>',
+        '<div class="bundle-info">预计剩余可卖: ' + formatInt(remainingSets) + ' 套（按已售分配后）</div>',
         info,
+        deficitInfo,
         '</article>'
       ].join('');
     }).join('');
@@ -684,12 +733,24 @@
     return bundles[0] || null;
   }
 
+  function getBundleById(bundleId) {
+    var id = String(bundleId || '');
+    var bundles = state.workspace.bundles;
+    for (var i = 0; i < bundles.length; i += 1) {
+      if (String(bundles[i].id) === id) {
+        return bundles[i];
+      }
+    }
+    return null;
+  }
+
   function createBundle(title) {
     return {
       id: createId(),
       title: title || '',
       notes: '',
       items: [],
+      soldSets: 0,
       calc: {
         priceP: '',
         r_comm: ''
@@ -714,6 +775,7 @@
             qty: normalizeQty(item.qty)
           };
         }),
+      soldSets: normalizeNonNegativeInt(safe.soldSets, 0),
       calc: {
         priceP: toText(calc.priceP),
         r_comm: toText(calc.r_comm)
@@ -748,6 +810,126 @@
       return 1;
     }
     return qty;
+  }
+
+  function normalizeNonNegativeInt(value, fallback) {
+    var num = Math.floor(Number(value));
+    if (!Number.isFinite(num) || num < 0) {
+      return toFinite(fallback, 0);
+    }
+    return num;
+  }
+
+  function updateProductStock(productId, nextStockRaw) {
+    var id = String(productId || '').trim();
+    if (!id) {
+      return;
+    }
+    var nextStock = normalizeNonNegativeInt(nextStockRaw, 0);
+    var changed = false;
+
+    state.products = state.products.map(function (product) {
+      if (!product || String(product.product_id) !== id) {
+        return product;
+      }
+      var currentStock = normalizeNonNegativeInt(product.stock, 0);
+      if (currentStock === nextStock) {
+        return product;
+      }
+      changed = true;
+      var clone = {};
+      Object.keys(product).forEach(function (key) {
+        clone[key] = product[key];
+      });
+      clone.stock = nextStock;
+      return clone;
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    state.productsUpdatedAt = Date.now();
+    rebuildProductMap();
+    AppStorage.saveProducts(state.products, state.productsUpdatedAt);
+    renderAll();
+  }
+
+  function buildRemainingStockContext() {
+    var remainingStockMap = new Map();
+    productMap.forEach(function (product, productId) {
+      remainingStockMap.set(String(productId), normalizeNonNegativeInt(product.stock, 0));
+    });
+
+    state.workspace.bundles.forEach(function (bundle) {
+      var soldSets = normalizeNonNegativeInt(bundle.soldSets, 0);
+      if (!(soldSets > 0)) {
+        return;
+      }
+      bundle.items.forEach(function (item) {
+        var id = String(item.product_id || '');
+        if (!id || !remainingStockMap.has(id)) {
+          return;
+        }
+        var qty = normalizeQty(item.qty);
+        var remain = toFinite(remainingStockMap.get(id), 0);
+        remainingStockMap.set(id, remain - soldSets * qty);
+      });
+    });
+
+    var deficitSkuCount = 0;
+    remainingStockMap.forEach(function (remain) {
+      if (toFinite(remain, 0) < 0) {
+        deficitSkuCount += 1;
+      }
+    });
+
+    return {
+      remainingStockMap: remainingStockMap,
+      deficitSkuCount: deficitSkuCount
+    };
+  }
+
+  function getRemainingSetsForBundle(bundle, remainingStockMap) {
+    var items = Array.isArray(bundle && bundle.items) ? bundle.items : [];
+    if (items.length === 0) {
+      return 0;
+    }
+
+    var maxSets = Infinity;
+    var hasValidSku = false;
+
+    items.forEach(function (item) {
+      var id = String(item && item.product_id || '');
+      if (!id) {
+        return;
+      }
+      hasValidSku = true;
+      var qty = normalizeQty(item.qty);
+      var remaining = remainingStockMap.has(id) ? toFinite(remainingStockMap.get(id), 0) : 0;
+      var available = Math.max(0, Math.floor(remaining));
+      maxSets = Math.min(maxSets, Math.floor(available / qty));
+    });
+
+    if (!hasValidSku || !Number.isFinite(maxSets) || maxSets < 0) {
+      return 0;
+    }
+    return maxSets;
+  }
+
+  function hasBundleStockDeficit(bundle, remainingStockMap) {
+    var items = Array.isArray(bundle && bundle.items) ? bundle.items : [];
+    for (var i = 0; i < items.length; i += 1) {
+      var id = String(items[i] && items[i].product_id || '');
+      if (!id) {
+        continue;
+      }
+      var remain = remainingStockMap.has(id) ? toFinite(remainingStockMap.get(id), 0) : 0;
+      if (remain < 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function toFinite(value, fallback) {
