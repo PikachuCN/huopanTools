@@ -177,6 +177,9 @@ body {
 
 .panel-products {
   grid-area: products;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .panel-editor {
@@ -189,6 +192,9 @@ body {
 
 .panel-bundles {
   grid-area: bundles;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .panel-header {
@@ -261,7 +267,8 @@ body {
 
 .product-list {
   max-height: none;
-  height: 100%;
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
   overflow: auto;
   display: flex;
@@ -488,6 +495,7 @@ body {
 .bundle-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+  flex: 1 1 auto;
   gap: 8px;
   margin-bottom: 8px;
   overflow: auto;
