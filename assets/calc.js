@@ -58,11 +58,11 @@
     var rComm = toFinite(input && input.r_comm, NaN);
 
     if (!(P > 0)) {
-      return invalid('请输入有效售价 P（必须大于 0）。', CBase);
+      return invalid('请输入有效售价（必须大于 0）。', CBase);
     }
 
     if (!Number.isFinite(rComm)) {
-      return invalid('请输入佣金率 r_comm。', CBase);
+      return invalid('请输入佣金率。', CBase);
     }
 
     var fee = P * FEE_RATE;

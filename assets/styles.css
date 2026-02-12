@@ -196,6 +196,16 @@ body {
   font-size: 18px;
 }
 
+.panel-header-calc {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.panel-header-calc h2 {
+  flex: 0 0 100%;
+  white-space: nowrap;
+}
+
 .panel-header.split {
   align-items: flex-start;
   flex-wrap: wrap;
@@ -268,6 +278,16 @@ body {
   border: 1px solid #d5e2ef;
   object-fit: cover;
   background: #f2f6fb;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transform-origin: center;
+  position: relative;
+  z-index: 1;
+}
+
+.thumb:hover {
+  transform: scale(1.85);
+  z-index: 10;
+  box-shadow: 0 10px 20px rgba(20, 50, 92, 0.25);
 }
 
 .thumb-empty {
@@ -316,7 +336,7 @@ body {
 .items-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 640px;
+  min-width: 720px;
 }
 
 .items-table th,
@@ -346,6 +366,11 @@ body {
 .items-table .sum-row td {
   background: #f7fbff;
   font-weight: 700;
+}
+
+.items-table .thumb {
+  width: 40px;
+  height: 40px;
 }
 
 .items-table tr.missing {

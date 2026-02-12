@@ -20,6 +20,9 @@
       </div>
 
       <div class="topbar-group right">
+        <button id="exportJsonBackupBtn" class="btn">导出JSON备份</button>
+        <button id="importJsonBackupBtn" class="btn">导入JSON备份</button>
+        <input id="jsonBackupInput" type="file" accept=".json,application/json" hidden />
         <button id="exportOpsBtn" class="btn">导出运营版HTML</button>
         <button id="previewOpsBtn" class="btn btn-secondary">运营版预览</button>
         <button id="exportHostBtn" class="btn">导出主播版HTML</button>
@@ -57,6 +60,7 @@
           <table class="items-table">
             <thead>
               <tr>
+                <th>图片</th>
                 <th>产品</th>
                 <th>单价</th>
                 <th>库存</th>
@@ -76,31 +80,31 @@
       </section>
 
       <section class="panel panel-calc">
-        <div class="panel-header">
+        <div class="panel-header panel-header-calc">
           <h2>计算面板</h2>
           <span class="hint">快速模式：售价 + 佣金率（平台服务费固定 7%）</span>
         </div>
 
         <div class="calc-inputs">
           <div id="fieldPrice" class="field">
-            <label for="calcPriceInput">售价 P（支持￥、逗号）</label>
+            <label for="calcPriceInput">售价（支持￥、逗号）</label>
             <input id="calcPriceInput" type="text" placeholder="例如 199 或 ￥199" />
           </div>
           <div id="fieldComm" class="field">
-            <label for="calcCommInput">佣金率 r_comm（支持 0.2 或 20，20=20%）</label>
+            <label for="calcCommInput">佣金率（支持 0.2 或 20，20=20%）</label>
             <input id="calcCommInput" type="text" placeholder="例如 0.25 或 25" />
           </div>
         </div>
 
         <div class="calc-output-grid">
-          <div class="kv"><span>C_base</span><strong id="outCBase">--</strong></div>
-          <div class="kv"><span>售价 P</span><strong id="outPrice">--</strong></div>
-          <div class="kv"><span>服务费 Fee</span><strong id="outFee">--</strong></div>
-          <div class="kv"><span>佣金额 Commission</span><strong id="outCommissionAmount">--</strong></div>
-          <div class="kv"><span>佣金率 r_comm</span><strong id="outCommissionRate">--</strong></div>
-          <div class="kv"><span>C_actual</span><strong id="outCActual">--</strong></div>
-          <div class="kv"><span>Profit</span><strong id="outProfit">--</strong></div>
-          <div class="kv"><span>ProfitRate</span><strong id="outProfitRate">--</strong></div>
+          <div class="kv"><span>成本合计</span><strong id="outCBase">--</strong></div>
+          <div class="kv"><span>售价</span><strong id="outPrice">--</strong></div>
+          <div class="kv"><span>平台服务费</span><strong id="outFee">--</strong></div>
+          <div class="kv"><span>佣金额</span><strong id="outCommissionAmount">--</strong></div>
+          <div class="kv"><span>佣金率</span><strong id="outCommissionRate">--</strong></div>
+          <div class="kv"><span>实际成本</span><strong id="outCActual">--</strong></div>
+          <div class="kv"><span>单套利润</span><strong id="outProfit">--</strong></div>
+          <div class="kv"><span>利润率</span><strong id="outProfitRate">--</strong></div>
         </div>
 
         <div class="calc-output-grid secondary">

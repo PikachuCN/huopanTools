@@ -37,6 +37,9 @@
     els.previewHostBtn = document.getElementById('previewHostBtn');
     els.exportNormalBtn = document.getElementById('exportNormalBtn');
     els.previewNormalBtn = document.getElementById('previewNormalBtn');
+    els.exportJsonBackupBtn = document.getElementById('exportJsonBackupBtn');
+    els.importJsonBackupBtn = document.getElementById('importJsonBackupBtn');
+    els.jsonBackupInput = document.getElementById('jsonBackupInput');
     els.statusBar = document.getElementById('statusBar');
 
     els.productSearchInput = document.getElementById('productSearchInput');
@@ -297,6 +300,23 @@
         setStatus('预览失败：' + err.message, 'error');
       }
     });
+
+    els.exportJsonBackupBtn.addEventListener('click', function () {
+      try {
+        var payload = createBackupPayload();
+        var filename = '货盘备份_' + formatFileTime(new Date()) + '.json';
+        downloadJson(filename, payload);
+        setStatus('JSON 备份已导出。', 'ok');
+      } catch (err) {
+        setStatus('JSON 备份导出失败：' + err.message, 'error');
+      }
+    });
+
+    els.importJsonBackupBtn.addEventListener('click', function () {
+      els.jsonBackupInput.click();
+    });
+
+    els.jsonBackupInput.addEventListener('change', handleJsonBackupFileChange);
   }
 
   async function handleCsvFileChange(event) {
@@ -325,6 +345,39 @@
       setStatus('CSV 导入失败：' + err.message, 'error');
     } finally {
       els.csvFileInput.value = '';
+    }
+  }
+
+  async function handleJsonBackupFileChange(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      var text = await file.text();
+      var parsed = JSON.parse(text);
+      var backup = normalizeBackup(parsed);
+
+      if (!window.confirm('导入 JSON 备份会覆盖当前货盘，是否继续？')) {
+        return;
+      }
+
+      state.products = backup.products;
+      state.productsUpdatedAt = backup.productsUpdatedAt;
+      state.workspace.bundles = backup.workspace.bundles.map(normalizeBundle);
+      state.workspace.currentBundleId = backup.workspace.currentBundleId;
+
+      ensureWorkspace();
+      rebuildProductMap();
+      AppStorage.saveProducts(state.products, state.productsUpdatedAt);
+      persistWorkspace();
+      renderAll();
+      setStatus('JSON 备份导入成功：' + state.workspace.bundles.length + ' 个套装，' + state.products.length + ' 个 SKU。', 'ok');
+    } catch (err) {
+      setStatus('JSON 备份导入失败：' + err.message, 'error');
+    } finally {
+      els.jsonBackupInput.value = '';
     }
   }
 
@@ -444,7 +497,7 @@
     var computed = getBundleComputed(bundle);
 
     if (bundle.items.length === 0) {
-      rows.push('<tr><td colspan="6" class="empty-row">从左侧产品库点击“加入”添加商品。</td></tr>');
+      rows.push('<tr><td colspan="7" class="empty-row">从左侧产品库点击“加入”添加商品。</td></tr>');
     } else {
       bundle.items.forEach(function (item, index) {
         var product = productMap.get(String(item.product_id));
@@ -453,9 +506,13 @@
         var stock = product ? Math.max(0, Math.floor(toFinite(product.stock, 0))) : 0;
         var name = product ? product.product_name : ('[缺失SKU] ' + item.product_id);
         var rowClass = product ? '' : 'missing';
+        var imageNode = product && product.image_url
+          ? '<img class="thumb" src="' + escapeHtml(product.image_url) + '" alt="" />'
+          : '<div class="thumb thumb-empty">无图</div>';
 
         rows.push([
           '<tr class="' + rowClass + '">',
+          '<td>' + imageNode + '</td>',
           '<td class="product-cell">' + escapeHtml(name) + '</td>',
           '<td>' + formatMoney(cost) + '</td>',
           '<td>' + formatInt(stock) + '</td>',
@@ -469,7 +526,7 @@
 
     rows.push([
       '<tr class="sum-row">',
-      '<td colspan="4">成本合计 C_base</td>',
+      '<td colspan="5">成本合计</td>',
       '<td colspan="2">' + formatMoney(computed.C_base) + '</td>',
       '</tr>'
     ].join(''));
@@ -561,7 +618,7 @@
       return [
         '<article class="bundle-card ' + active + ' ' + loss + '" data-bundle-id="' + escapeHtml(bundle.id) + '">',
         '<div class="bundle-title">' + escapeHtml(title) + '</div>',
-        '<div class="bundle-info">SKU: ' + formatInt(bundle.items.length) + ' ｜ C_base: ' + formatMoney(computed.C_base) + '</div>',
+        '<div class="bundle-info">SKU 数: ' + formatInt(bundle.items.length) + ' ｜ 成本合计: ' + formatMoney(computed.C_base) + '</div>',
         '<div class="bundle-info">售价: ' + price + ' ｜ 利润率: ' + profitRate + '</div>',
         '<div class="bundle-info">最大可卖: ' + formatInt(stock.maxSets) + ' 套 ｜ 可撑GMV: ' + formatMoney(stock.gmv) + '</div>',
         info,
@@ -704,6 +761,68 @@
 
   function createId() {
     return 'bundle_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function createBackupPayload() {
+    return JSON.stringify({
+      type: 'live_combo_backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      products: Array.isArray(state.products) ? state.products : [],
+      productsUpdatedAt: state.productsUpdatedAt || null,
+      workspace: state.workspace || {}
+    }, null, 2);
+  }
+
+  function normalizeBackup(raw) {
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('文件内容不是有效 JSON 对象。');
+    }
+
+    var products = Array.isArray(raw.products) ? raw.products : [];
+    var productsUpdatedAtRaw = raw.productsUpdatedAt;
+    var productsUpdatedAtNum = productsUpdatedAtRaw == null ? NaN : Number(productsUpdatedAtRaw);
+    var workspace = raw.workspace && typeof raw.workspace === 'object' ? raw.workspace : {};
+    var bundles = Array.isArray(workspace.bundles) ? workspace.bundles : [];
+    var currentBundleId = typeof workspace.currentBundleId === 'string' ? workspace.currentBundleId : '';
+
+    return {
+      products: products,
+      productsUpdatedAt: Number.isFinite(productsUpdatedAtNum) ? productsUpdatedAtNum : null,
+      workspace: {
+        bundles: bundles,
+        currentBundleId: currentBundleId
+      }
+    };
+  }
+
+  function formatFileTime(date) {
+    function pad(num) {
+      return String(num).padStart(2, '0');
+    }
+    return [
+      date.getFullYear(),
+      pad(date.getMonth() + 1),
+      pad(date.getDate()),
+      '_',
+      pad(date.getHours()),
+      pad(date.getMinutes()),
+      pad(date.getSeconds())
+    ].join('');
+  }
+
+  function downloadJson(filename, content) {
+    var blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1000);
   }
 
   function formatMoney(value) {
