@@ -108,7 +108,7 @@
       addProductToCurrentBundle(button.getAttribute('data-product-id'));
     });
 
-    els.productList.addEventListener('change', function (event) {
+    els.productList.addEventListener('input', function (event) {
       if (!event.target.classList.contains('stock-quick-input')) {
         return;
       }
@@ -133,7 +133,7 @@
       renderBundleCardsAndSummary();
     });
 
-    els.bundleItemsBody.addEventListener('change', function (event) {
+    els.bundleItemsBody.addEventListener('input', function (event) {
       if (!event.target.classList.contains('stock-inline-input')) {
         return;
       }
@@ -268,7 +268,7 @@
       renderBundleCardsAndSummary();
     });
 
-    els.bundleCards.addEventListener('change', function (event) {
+    els.bundleCards.addEventListener('input', function (event) {
       if (!event.target.classList.contains('sold-sets-input')) {
         return;
       }
@@ -479,6 +479,7 @@
 
   function renderProductList() {
     var keyword = String(els.productSearchInput.value || '').trim().toLowerCase();
+    var remainingStockMap = buildRemainingStockContext().remainingStockMap;
     var filtered = state.products.filter(function (product) {
       if (!keyword) {
         return true;
@@ -497,7 +498,13 @@
       var img = product.image_url
         ? '<img class="thumb" src="' + escapeHtml(product.image_url) + '" alt="" />'
         : '<div class="thumb thumb-empty">无图</div>';
-      var stock = Math.max(0, Math.floor(toFinite(product.stock, 0)));
+      var totalStock = Math.max(0, Math.floor(toFinite(product.stock, 0)));
+      var remainingStock = Math.max(
+        0,
+        Math.floor(remainingStockMap.has(String(product.product_id))
+          ? toFinite(remainingStockMap.get(String(product.product_id)), 0)
+          : totalStock)
+      );
 
       return [
         '<article class="product-item">',
@@ -506,9 +513,10 @@
         '<div class="product-name">' + escapeHtml(product.product_name || product.product_id) + '</div>',
         '<div class="product-meta">ID: ' + escapeHtml(product.product_id) + '</div>',
         '<div class="product-meta">成本: ' + formatMoney(toFinite(product.cost, 0)) + '</div>',
-        '<label class="product-meta product-stock-edit">库存:',
-        '<input class="stock-quick-input" data-product-id="' + escapeHtml(product.product_id) + '" type="number" min="0" step="1" value="' + stock + '" />',
+        '<label class="product-meta product-stock-edit">总库存:',
+        '<input class="stock-quick-input" data-product-id="' + escapeHtml(product.product_id) + '" type="number" min="0" step="1" value="' + totalStock + '" />',
         '</label>',
+        '<div class="product-meta stock-meta">剩余: ' + formatInt(remainingStock) + '</div>',
         '</div>',
         '<button class="btn btn-sm add-product-btn" data-product-id="' + escapeHtml(product.product_id) + '">加入</button>',
         '</article>'
@@ -531,6 +539,7 @@
   function renderBundleItems(bundle) {
     var rows = [];
     var computed = getBundleComputed(bundle);
+    var remainingStockMap = buildRemainingStockContext().remainingStockMap;
 
     if (bundle.items.length === 0) {
       rows.push('<tr><td colspan="7" class="empty-row">从左侧产品库点击“加入”添加商品。</td></tr>');
@@ -539,7 +548,13 @@
         var product = productMap.get(String(item.product_id));
         var qty = normalizeQty(item.qty);
         var cost = product ? toFinite(product.cost, 0) : 0;
-        var stock = product ? Math.max(0, Math.floor(toFinite(product.stock, 0))) : 0;
+        var totalStock = product ? Math.max(0, Math.floor(toFinite(product.stock, 0))) : 0;
+        var remainingStock = Math.max(
+          0,
+          Math.floor(remainingStockMap.has(String(item.product_id))
+            ? toFinite(remainingStockMap.get(String(item.product_id)), 0)
+            : totalStock)
+        );
         var name = product ? product.product_name : ('[缺失SKU] ' + item.product_id);
         var rowClass = product ? '' : 'missing';
         var imageNode = product && product.image_url
@@ -551,7 +566,7 @@
           '<td>' + imageNode + '</td>',
           '<td class="product-cell">' + escapeHtml(name) + '</td>',
           '<td>' + formatMoney(cost) + '</td>',
-          '<td><input class="stock-inline-input" data-product-id="' + escapeHtml(item.product_id) + '" type="number" min="0" step="1" value="' + formatInt(stock) + '" ' + (product ? '' : 'disabled') + ' /></td>',
+          '<td><div class="stock-cell"><input class="stock-inline-input" data-product-id="' + escapeHtml(item.product_id) + '" type="number" min="0" step="1" value="' + formatInt(totalStock) + '" ' + (product ? '' : 'disabled') + ' /><span class="stock-sub">余 ' + formatInt(remainingStock) + '</span></div></td>',
           '<td><input class="qty-input" data-index="' + index + '" type="number" min="1" step="1" value="' + qty + '" /></td>',
           '<td>' + formatMoney(cost * qty) + '</td>',
           '<td><button class="btn btn-sm btn-outline-danger remove-item-btn" data-index="' + index + '">删除</button></td>',
@@ -619,7 +634,7 @@
       warnings.push(metrics.message);
     }
     if (hasDeficit) {
-      warnings.push('当前套装涉及的 SKU 已出现超卖，请先调整已售套数或库存。');
+      warnings.push('涉及 SKU 已超卖，请先调整已售套数或库存。');
     }
 
     if (warnings.length > 0) {
@@ -666,7 +681,7 @@
       var profitRate = metrics.valid ? formatPct(metrics.ProfitRate) : '--';
       var info = metrics.valid ? '' : '<div class="bundle-info muted">参数未完整</div>';
       var deficitInfo = deficit
-        ? '<div class="bundle-info muted">库存分配已超卖，请调整已售套数或库存。</div>'
+        ? '<div class="bundle-info muted">SKU 已超卖，请调整已售或库存。</div>'
         : '';
 
       return [
@@ -674,11 +689,11 @@
         '<div class="bundle-title">' + escapeHtml(title) + '</div>',
         '<div class="bundle-info">SKU 数: ' + formatInt(bundle.items.length) + ' ｜ 成本合计: ' + formatMoney(computed.C_base) + '</div>',
         '<div class="bundle-info">售价: ' + price + ' ｜ 利润率: ' + profitRate + '</div>',
-        '<div class="bundle-info">理论可卖: ' + formatInt(stock.maxSets) + ' 套 ｜ 动态剩余可卖: ' + formatInt(remainingSets) + ' 套</div>',
+        '<div class="bundle-info">理论: ' + formatInt(stock.maxSets) + ' 套 ｜ 动态剩余: ' + formatInt(remainingSets) + ' 套</div>',
         '<label class="bundle-inline-edit">已售套数',
         '<input class="sold-sets-input" data-bundle-id="' + escapeHtml(bundle.id) + '" type="number" min="0" step="1" value="' + soldSets + '" />',
         '</label>',
-        '<div class="bundle-info">动态可撑GMV: ' + formatMoney(dynamicStock.gmv) + ' ｜ 动态可撑利润: ' + formatMoney(dynamicStock.profitCapacity) + '</div>',
+        '<div class="bundle-info">动态GMV: ' + formatMoney(dynamicStock.gmv) + ' ｜ 动态利润: ' + formatMoney(dynamicStock.profitCapacity) + '</div>',
         info,
         deficitInfo,
         '</article>'
