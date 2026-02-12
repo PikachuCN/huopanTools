@@ -215,7 +215,7 @@
         '<tr>',
         '<td>' + (index + 1) + '</td>',
         '<td>' + escapeHtml(bundle.title) + '</td>',
-        '<td class="item-cell">' + renderItemList(bundle.items, false) + '</td>',
+        '<td class="item-cell">' + renderItemList(bundle.items, true) + '</td>',
         '<td>' + (Number.isFinite(price) ? fmtMoney(price) : '待定') + '</td>',
         '</tr>'
       ].join('');
