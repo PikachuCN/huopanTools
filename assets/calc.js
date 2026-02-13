@@ -1,7 +1,7 @@
 (function (global) {
   'use strict';
 
-  var FEE_RATE = 0.07;
+  var DEFAULT_FEE_RATE = 0.07;
 
   function toFinite(value, fallback) {
     var n = Number(value);
@@ -31,14 +31,18 @@
     return sum;
   }
 
-  function invalid(message, CBase) {
+  function normalizeFeeRate(value) {
+    return Number.isFinite(value) ? value : DEFAULT_FEE_RATE;
+  }
+
+  function invalid(message, CBase, rFee) {
     return {
       mode: 'quick',
       valid: false,
       impossible: false,
       message: message || '请输入完整参数。',
       loss: false,
-      r_fee: FEE_RATE,
+      r_fee: normalizeFeeRate(rFee),
       C_base: CBase,
       P: NaN,
       r_comm: NaN,
@@ -56,21 +60,30 @@
     var CBase = toFinite(input && input.C_base, 0);
     var P = toFinite(input && input.P, NaN);
     var rComm = toFinite(input && input.r_comm, NaN);
+    var rFee = toFinite(input && input.r_fee, NaN);
+
+    if (!Number.isFinite(rFee)) {
+      rFee = DEFAULT_FEE_RATE;
+    }
+
+    if (!(rFee >= 0 && rFee <= 1)) {
+      return invalid('请输入有效平台服务费率（必须在 0% 到 100% 之间）。', CBase, rFee);
+    }
 
     if (!(P > 0)) {
-      return invalid('请输入有效售价（必须大于 0）。', CBase);
+      return invalid('请输入有效售价（必须大于 0）。', CBase, rFee);
     }
 
     if (!Number.isFinite(rComm)) {
-      return invalid('请输入佣金率。', CBase);
+      return invalid('请输入佣金率。', CBase, rFee);
     }
 
-    var fee = P * FEE_RATE;
+    var fee = P * rFee;
     var commission = P * rComm;
     var cActual = CBase + fee;
     var profit = P - cActual - commission;
     var profitRate = profit / P;
-    var safeRComm = 1 - FEE_RATE - CBase / P;
+    var safeRComm = 1 - rFee - CBase / P;
 
     var message = '';
     if (profit < 0) {
@@ -86,7 +99,7 @@
       impossible: false,
       message: message,
       loss: profit < 0,
-      r_fee: FEE_RATE,
+      r_fee: rFee,
       C_base: CBase,
       P: P,
       r_comm: rComm,
@@ -148,7 +161,8 @@
   }
 
   global.CalcEngine = {
-    FEE_RATE: FEE_RATE,
+    DEFAULT_FEE_RATE: DEFAULT_FEE_RATE,
+    FEE_RATE: DEFAULT_FEE_RATE,
     computeBaseCost: computeBaseCost,
     calculate: calculate,
     inferStock: inferStock

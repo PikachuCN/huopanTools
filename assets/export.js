@@ -15,7 +15,12 @@
   }
 
   function parseRate(value) {
-    var num = parseMoney(value);
+    var fallback = arguments.length > 1 ? arguments[1] : NaN;
+    var text = String(value == null ? '' : value).trim();
+    if (!text) {
+      return Number.isFinite(fallback) ? fallback : NaN;
+    }
+    var num = parseMoney(text);
     if (!Number.isFinite(num)) {
       return NaN;
     }
@@ -30,6 +35,11 @@
   function toFinite(value, fallback) {
     var num = Number(value);
     return Number.isFinite(num) ? num : fallback;
+  }
+
+  function defaultFeeRateValue() {
+    var rate = Number(CalcEngine && CalcEngine.DEFAULT_FEE_RATE);
+    return Number.isFinite(rate) ? rate : 0.07;
   }
 
   function buildProductMap(products) {
@@ -57,6 +67,7 @@
     var metrics = CalcEngine.calculate('quick', {
       P: parseMoney(safeBundle.calc && safeBundle.calc.priceP),
       r_comm: parseRate(safeBundle.calc && safeBundle.calc.r_comm),
+      r_fee: parseRate(safeBundle.calc && safeBundle.calc.r_fee, defaultFeeRateValue()),
       C_base: CBase
     });
     var stock = CalcEngine.inferStock(items, productMap, metrics);
@@ -118,7 +129,7 @@
     return {
       generatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
       productsCount: products.length,
-      feeRate: CalcEngine.FEE_RATE,
+      feeRate: defaultFeeRateValue(),
       bundles: bundles,
       summary: summary
     };

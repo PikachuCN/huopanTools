@@ -51,6 +51,7 @@
 
     els.calcPriceInput = document.getElementById('calcPriceInput');
     els.calcCommInput = document.getElementById('calcCommInput');
+    els.calcFeeInput = document.getElementById('calcFeeInput');
 
     els.outCBase = document.getElementById('outCBase');
     els.outPrice = document.getElementById('outPrice');
@@ -195,6 +196,17 @@
         return;
       }
       bundle.calc.r_comm = els.calcCommInput.value;
+      persistWorkspace();
+      updateCalcOutputs(bundle);
+      renderBundleCardsAndSummary();
+    });
+
+    els.calcFeeInput.addEventListener('input', function () {
+      var bundle = getCurrentBundle();
+      if (!bundle) {
+        return;
+      }
+      bundle.calc.r_fee = els.calcFeeInput.value;
       persistWorkspace();
       updateCalcOutputs(bundle);
       renderBundleCardsAndSummary();
@@ -588,6 +600,7 @@
   function renderCalcForm(bundle) {
     els.calcPriceInput.value = bundle.calc.priceP;
     els.calcCommInput.value = bundle.calc.r_comm;
+    els.calcFeeInput.value = bundle.calc.r_fee;
     updateCalcOutputs(bundle);
   }
 
@@ -738,6 +751,7 @@
     var metrics = CalcEngine.calculate('quick', {
       P: parseMoney(bundle.calc.priceP),
       r_comm: parseRate(bundle.calc.r_comm),
+      r_fee: parseRate(bundle.calc.r_fee, defaultFeeRateValue()),
       C_base: CBase
     });
     var stock = CalcEngine.inferStock(bundle.items, productMap, metrics);
@@ -779,7 +793,8 @@
       soldSets: 0,
       calc: {
         priceP: '',
-        r_comm: ''
+        r_comm: '',
+        r_fee: defaultFeeRateText()
       }
     };
   }
@@ -787,6 +802,10 @@
   function normalizeBundle(bundle, index) {
     var safe = bundle && typeof bundle === 'object' ? bundle : {};
     var calc = safe.calc && typeof safe.calc === 'object' ? safe.calc : {};
+    var feeText = toText(calc.r_fee).trim();
+    if (!feeText) {
+      feeText = defaultFeeRateText();
+    }
 
     var items = Array.isArray(safe.items) ? safe.items : [];
     return {
@@ -804,7 +823,8 @@
       soldSets: normalizeNonNegativeInt(safe.soldSets, 0),
       calc: {
         priceP: toText(calc.priceP),
-        r_comm: toText(calc.r_comm)
+        r_comm: toText(calc.r_comm),
+        r_fee: feeText
       }
     };
   }
@@ -822,8 +842,12 @@
     return Number.isFinite(num) ? num : NaN;
   }
 
-  function parseRate(value) {
-    var num = parseMoney(value);
+  function parseRate(value, fallback) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text) {
+      return Number.isFinite(fallback) ? fallback : NaN;
+    }
+    var num = parseMoney(text);
     if (!Number.isFinite(num)) {
       return NaN;
     }
@@ -977,6 +1001,15 @@
 
   function toText(value) {
     return value == null ? '' : String(value);
+  }
+
+  function defaultFeeRateValue() {
+    var rate = Number(CalcEngine && CalcEngine.DEFAULT_FEE_RATE);
+    return Number.isFinite(rate) ? rate : 0.07;
+  }
+
+  function defaultFeeRateText() {
+    return String(Number((defaultFeeRateValue() * 100).toFixed(6)));
   }
 
   function createId() {

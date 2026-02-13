@@ -82,7 +82,7 @@
       <section class="panel panel-calc">
         <div class="panel-header panel-header-calc">
           <h2>计算面板</h2>
-          <span class="hint">快速模式：售价 + 佣金率（平台服务费固定 7%）</span>
+          <span class="hint">快速模式：售价 + 佣金率 + 平台服务费率（默认 7%）</span>
         </div>
 
         <div class="calc-inputs">
@@ -93,6 +93,10 @@
           <div id="fieldComm" class="field">
             <label for="calcCommInput">佣金率（支持 0.2 或 20，20=20%）</label>
             <input id="calcCommInput" type="text" placeholder="例如 0.25 或 25" />
+          </div>
+          <div id="fieldFee" class="field">
+            <label for="calcFeeInput">平台服务费率（默认 7%，支持 0.07 或 7）</label>
+            <input id="calcFeeInput" type="text" placeholder="例如 0.07 或 7" />
           </div>
         </div>
 
