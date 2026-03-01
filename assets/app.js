@@ -109,19 +109,17 @@
       addProductToCurrentBundle(button.getAttribute('data-product-id'));
     });
 
-    els.productList.addEventListener('input', function (event) {
+    els.productList.addEventListener('change', function (event) {
       if (!event.target.classList.contains('stock-quick-input')) {
         return;
       }
-      var focusSnapshot = captureNumericInputFocus(event.target);
-      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value, focusSnapshot);
+      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value);
     });
 
-    els.bundleItemsBody.addEventListener('input', function (event) {
+    els.bundleItemsBody.addEventListener('change', function (event) {
       if (!event.target.classList.contains('qty-input')) {
         return;
       }
-      var focusSnapshot = captureNumericInputFocus(event.target);
       var bundle = getCurrentBundle();
       if (!bundle) {
         return;
@@ -134,15 +132,13 @@
       persistWorkspace();
       renderBundleEditor();
       renderBundleCardsAndSummary();
-      restoreNumericInputFocus(focusSnapshot);
     });
 
-    els.bundleItemsBody.addEventListener('input', function (event) {
+    els.bundleItemsBody.addEventListener('change', function (event) {
       if (!event.target.classList.contains('stock-inline-input')) {
         return;
       }
-      var focusSnapshot = captureNumericInputFocus(event.target);
-      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value, focusSnapshot);
+      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value);
     });
 
     els.bundleItemsBody.addEventListener('click', function (event) {
@@ -284,11 +280,10 @@
       renderBundleCardsAndSummary();
     });
 
-    els.bundleCards.addEventListener('input', function (event) {
+    els.bundleCards.addEventListener('change', function (event) {
       if (!event.target.classList.contains('sold-sets-input')) {
         return;
       }
-      var focusSnapshot = captureNumericInputFocus(event.target);
       var bundleId = event.target.getAttribute('data-bundle-id');
       var bundle = getBundleById(bundleId);
       if (!bundle) {
@@ -297,7 +292,6 @@
       bundle.soldSets = normalizeNonNegativeInt(event.target.value, 0);
       persistWorkspace();
       renderBundleCardsAndSummary();
-      restoreNumericInputFocus(focusSnapshot);
     });
 
     els.exportOpsBtn.addEventListener('click', function () {
@@ -967,93 +961,8 @@
     return num;
   }
 
-  function captureNumericInputFocus(input) {
-    if (!input || !input.classList) {
-      return null;
-    }
 
-    var trackedClass = '';
-    if (input.classList.contains('stock-quick-input')) {
-      trackedClass = 'stock-quick-input';
-    } else if (input.classList.contains('stock-inline-input')) {
-      trackedClass = 'stock-inline-input';
-    } else if (input.classList.contains('qty-input')) {
-      trackedClass = 'qty-input';
-    } else if (input.classList.contains('sold-sets-input')) {
-      trackedClass = 'sold-sets-input';
-    }
-
-    if (!trackedClass) {
-      return null;
-    }
-
-    var selectionStart = null;
-    var selectionEnd = null;
-    try {
-      selectionStart = input.selectionStart;
-      selectionEnd = input.selectionEnd;
-    } catch (err) {
-      // selectionStart is unsupported on some number inputs.
-    }
-
-    return {
-      trackedClass: trackedClass,
-      productId: input.getAttribute('data-product-id'),
-      index: input.getAttribute('data-index'),
-      bundleId: input.getAttribute('data-bundle-id'),
-      selectionStart: selectionStart,
-      selectionEnd: selectionEnd
-    };
-  }
-
-  function findNumericInputByFocus(snapshot) {
-    if (!snapshot || !snapshot.trackedClass) {
-      return null;
-    }
-
-    var nodes = document.querySelectorAll('.' + snapshot.trackedClass);
-    for (var i = 0; i < nodes.length; i += 1) {
-      var node = nodes[i];
-      if (snapshot.productId != null && node.getAttribute('data-product-id') !== snapshot.productId) {
-        continue;
-      }
-      if (snapshot.index != null && node.getAttribute('data-index') !== snapshot.index) {
-        continue;
-      }
-      if (snapshot.bundleId != null && node.getAttribute('data-bundle-id') !== snapshot.bundleId) {
-        continue;
-      }
-      return node;
-    }
-    return null;
-  }
-
-  function restoreNumericInputFocus(snapshot) {
-    var input = findNumericInputByFocus(snapshot);
-    if (!input) {
-      return;
-    }
-
-    try {
-      input.focus({ preventScroll: true });
-    } catch (err) {
-      input.focus();
-    }
-
-    if (
-      typeof snapshot.selectionStart === 'number'
-      && typeof snapshot.selectionEnd === 'number'
-      && typeof input.setSelectionRange === 'function'
-    ) {
-      try {
-        input.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
-      } catch (err) {
-        // ignore unsupported selection restoration
-      }
-    }
-  }
-
-  function updateProductStock(productId, nextStockRaw, focusSnapshot) {
+  function updateProductStock(productId, nextStockRaw) {
     var id = String(productId || '').trim();
     if (!id) {
       return;
@@ -1086,7 +995,6 @@
     rebuildProductMap();
     AppStorage.saveProducts(state.products, state.productsUpdatedAt);
     renderAll();
-    restoreNumericInputFocus(focusSnapshot);
   }
 
   function buildRemainingStockContext() {
