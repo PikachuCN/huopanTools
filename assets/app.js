@@ -113,13 +113,15 @@
       if (!event.target.classList.contains('stock-quick-input')) {
         return;
       }
-      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value);
+      var focusSnapshot = captureNumericInputFocus(event.target);
+      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value, focusSnapshot);
     });
 
     els.bundleItemsBody.addEventListener('input', function (event) {
       if (!event.target.classList.contains('qty-input')) {
         return;
       }
+      var focusSnapshot = captureNumericInputFocus(event.target);
       var bundle = getCurrentBundle();
       if (!bundle) {
         return;
@@ -132,13 +134,15 @@
       persistWorkspace();
       renderBundleEditor();
       renderBundleCardsAndSummary();
+      restoreNumericInputFocus(focusSnapshot);
     });
 
     els.bundleItemsBody.addEventListener('input', function (event) {
       if (!event.target.classList.contains('stock-inline-input')) {
         return;
       }
-      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value);
+      var focusSnapshot = captureNumericInputFocus(event.target);
+      updateProductStock(event.target.getAttribute('data-product-id'), event.target.value, focusSnapshot);
     });
 
     els.bundleItemsBody.addEventListener('click', function (event) {
@@ -284,6 +288,7 @@
       if (!event.target.classList.contains('sold-sets-input')) {
         return;
       }
+      var focusSnapshot = captureNumericInputFocus(event.target);
       var bundleId = event.target.getAttribute('data-bundle-id');
       var bundle = getBundleById(bundleId);
       if (!bundle) {
@@ -292,6 +297,7 @@
       bundle.soldSets = normalizeNonNegativeInt(event.target.value, 0);
       persistWorkspace();
       renderBundleCardsAndSummary();
+      restoreNumericInputFocus(focusSnapshot);
     });
 
     els.exportOpsBtn.addEventListener('click', function () {
@@ -363,6 +369,97 @@
     els.jsonBackupInput.addEventListener('change', handleJsonBackupFileChange);
   }
 
+  function hasUtf8Bom(bytes) {
+    return bytes.length >= 3
+      && bytes[0] === 0xEF
+      && bytes[1] === 0xBB
+      && bytes[2] === 0xBF;
+  }
+
+  function getSupportedGbEncoding() {
+    var candidates = ['gb18030', 'gbk'];
+    for (var i = 0; i < candidates.length; i += 1) {
+      try {
+        new TextDecoder(candidates[i]);
+        return candidates[i];
+      } catch (err) {
+        // ignore unsupported encoding
+      }
+    }
+    return '';
+  }
+
+  function tryImportProductsByEncoding(bytes, encoding, options) {
+    try {
+      var decoder = new TextDecoder(encoding, options || {});
+      var text = decoder.decode(bytes);
+      var result = CSVUtils.importProducts(text);
+      return {
+        ok: true,
+        encoding: encoding,
+        result: result
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        encoding: encoding,
+        error: err
+      };
+    }
+  }
+
+  function getEncodingLabel(encoding) {
+    if (encoding === 'utf-8') {
+      return 'UTF-8';
+    }
+    if (encoding === 'gb18030' || encoding === 'gbk') {
+      return 'GBK';
+    }
+    return String(encoding || '').toUpperCase();
+  }
+
+  function buildCsvImportError(utfError, gbError) {
+    if (gbError) {
+      return new Error('无法按 UTF-8 或 GBK 解析该 CSV。UTF-8：' + utfError.message + '；GBK：' + gbError.message);
+    }
+    return utfError;
+  }
+
+  async function importCsvWithEncodingFallback(file) {
+    if (typeof TextDecoder !== 'function' || typeof file.arrayBuffer !== 'function') {
+      var fallbackText = await file.text();
+      return {
+        encoding: 'utf-8',
+        result: CSVUtils.importProducts(fallbackText)
+      };
+    }
+
+    var bytes = new Uint8Array(await file.arrayBuffer());
+    var utfOptions = hasUtf8Bom(bytes) ? {} : { fatal: true };
+    var utfResult = tryImportProductsByEncoding(bytes, 'utf-8', utfOptions);
+    if (utfResult.ok) {
+      return {
+        encoding: utfResult.encoding,
+        result: utfResult.result
+      };
+    }
+
+    var gbEncoding = getSupportedGbEncoding();
+    if (!gbEncoding) {
+      throw utfResult.error;
+    }
+
+    var gbResult = tryImportProductsByEncoding(bytes, gbEncoding, {});
+    if (gbResult.ok) {
+      return {
+        encoding: gbResult.encoding,
+        result: gbResult.result
+      };
+    }
+
+    throw buildCsvImportError(utfResult.error, gbResult.error);
+  }
+
   async function handleCsvFileChange(event) {
     var file = event.target.files && event.target.files[0];
     if (!file) {
@@ -370,15 +467,15 @@
     }
 
     try {
-      var text = await file.text();
-      var result = CSVUtils.importProducts(text);
+      var imported = await importCsvWithEncodingFallback(file);
+      var result = imported.result;
       state.products = result.products;
       state.productsUpdatedAt = Date.now();
       rebuildProductMap();
       AppStorage.saveProducts(state.products, state.productsUpdatedAt);
       renderAll();
 
-      var message = 'CSV 导入完成：' + state.products.length + ' 个 SKU。';
+      var message = 'CSV 导入完成：' + state.products.length + ' 个 SKU（编码：' + getEncodingLabel(imported.encoding) + '）。';
       if (result.warnings.length > 0) {
         message += ' 警告 ' + result.warnings.length + ' 条（示例：' + result.warnings.slice(0, 2).join('；') + '）。';
         setStatus(message, 'warn');
@@ -870,7 +967,93 @@
     return num;
   }
 
-  function updateProductStock(productId, nextStockRaw) {
+  function captureNumericInputFocus(input) {
+    if (!input || !input.classList) {
+      return null;
+    }
+
+    var trackedClass = '';
+    if (input.classList.contains('stock-quick-input')) {
+      trackedClass = 'stock-quick-input';
+    } else if (input.classList.contains('stock-inline-input')) {
+      trackedClass = 'stock-inline-input';
+    } else if (input.classList.contains('qty-input')) {
+      trackedClass = 'qty-input';
+    } else if (input.classList.contains('sold-sets-input')) {
+      trackedClass = 'sold-sets-input';
+    }
+
+    if (!trackedClass) {
+      return null;
+    }
+
+    var selectionStart = null;
+    var selectionEnd = null;
+    try {
+      selectionStart = input.selectionStart;
+      selectionEnd = input.selectionEnd;
+    } catch (err) {
+      // selectionStart is unsupported on some number inputs.
+    }
+
+    return {
+      trackedClass: trackedClass,
+      productId: input.getAttribute('data-product-id'),
+      index: input.getAttribute('data-index'),
+      bundleId: input.getAttribute('data-bundle-id'),
+      selectionStart: selectionStart,
+      selectionEnd: selectionEnd
+    };
+  }
+
+  function findNumericInputByFocus(snapshot) {
+    if (!snapshot || !snapshot.trackedClass) {
+      return null;
+    }
+
+    var nodes = document.querySelectorAll('.' + snapshot.trackedClass);
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+      if (snapshot.productId != null && node.getAttribute('data-product-id') !== snapshot.productId) {
+        continue;
+      }
+      if (snapshot.index != null && node.getAttribute('data-index') !== snapshot.index) {
+        continue;
+      }
+      if (snapshot.bundleId != null && node.getAttribute('data-bundle-id') !== snapshot.bundleId) {
+        continue;
+      }
+      return node;
+    }
+    return null;
+  }
+
+  function restoreNumericInputFocus(snapshot) {
+    var input = findNumericInputByFocus(snapshot);
+    if (!input) {
+      return;
+    }
+
+    try {
+      input.focus({ preventScroll: true });
+    } catch (err) {
+      input.focus();
+    }
+
+    if (
+      typeof snapshot.selectionStart === 'number'
+      && typeof snapshot.selectionEnd === 'number'
+      && typeof input.setSelectionRange === 'function'
+    ) {
+      try {
+        input.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+      } catch (err) {
+        // ignore unsupported selection restoration
+      }
+    }
+  }
+
+  function updateProductStock(productId, nextStockRaw, focusSnapshot) {
     var id = String(productId || '').trim();
     if (!id) {
       return;
@@ -903,6 +1086,7 @@
     rebuildProductMap();
     AppStorage.saveProducts(state.products, state.productsUpdatedAt);
     renderAll();
+    restoreNumericInputFocus(focusSnapshot);
   }
 
   function buildRemainingStockContext() {
